@@ -11,3 +11,17 @@ janet vtt2txt.janet input.vtt output.txt
 
 * 如果省略 `output.txt`, 转换结果会直接打印到标准输出。
 * 脚本会去除 `WEBVTT` 头、编号、时间戳以及 `NOTE`/`STYLE`/`REGION` 块，只保留字幕文本。
+
+## 构建与测试
+
+使用 jpm 生成可执行文件:
+
+```bash
+jpm build
+```
+
+运行仓库内的基本测试:
+
+```bash
+janet test/test.janet
+```
