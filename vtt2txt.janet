@@ -1,24 +1,29 @@
 #! /usr/bin/env janet
 
 (defn prefix? [s prefix]
-  (let [idx (string/find s prefix)]
+  (let [idx (string/find prefix s)]
     (and idx (= 0 idx))))
 
-(def cue-id-pattern ~"^[0-9]+$")
 (def script-pattern ~"[^/\\\\]+%.janet$")
 
+(defn numeric-line? [s]
+  (and (> (length s) 0)
+       (all (fn [b] (and (>= b 48) (<= b 57)))
+            (string/bytes s))))
+
 (defn read-file [path]
-  (let [[ok content] (pcall slurp path)]
-    (if ok
-      content
-      (do (printf "Failed to read '%s': %v\n" path content)
-          (os/exit 1)))))
+  (try
+    (slurp path)
+    ([err]
+     (printf "Failed to read '%s': %v\n" path err)
+     (os/exit 1))))
 
 (defn write-file [path data]
-  (let [[ok err] (pcall spit path data)]
-    (when (not ok)
-      (printf "Failed to write '%s': %v\n" path err)
-      (os/exit 1))))
+  (try
+    (spit path data)
+    ([err]
+     (printf "Failed to write '%s': %v\n" path err)
+     (os/exit 1))))
 
 (defn push-text [out line]
   (if (= "" line)
@@ -27,11 +32,11 @@
     (array/push out line)))
 
 (defn clean-lines [content]
-  (var normalized (string/replace content "\r\n" "\n"))
-  (set normalized (string/replace normalized "\ufeff" ""))
+  (var normalized (string/replace "\r\n" "\n" content))
+  (set normalized (string/replace "\ufeff" "" normalized))
   (var output @[])
   (var skip-block false)
-  (each line (string/split normalized "\n")
+  (each line (string/split "\n" normalized)
     (def trimmed (string/trim line))
     (if skip-block
       (when (= "" trimmed) (set skip-block false))
@@ -40,10 +45,10 @@
         (prefix? trimmed "NOTE") (set skip-block true)
         (prefix? trimmed "STYLE") (set skip-block true)
         (prefix? trimmed "REGION") (set skip-block true)
-        (string/find trimmed "-->") nil
+        (string/find "-->" trimmed) nil
         # Skip numeric cue identifiers like "12"
-        (peg/match cue-id-pattern trimmed) nil
-        :else (push-text output trimmed)))))
+        (numeric-line? trimmed) nil
+        :else (push-text output trimmed))))
   (while (and (> (length output) 0) (= "" (last output)))
     (array/pop output))
   output)
@@ -58,7 +63,7 @@
 (defn cli-argv [args]
   (let [argv (if (> (length args) 0)
                args
-               (or (dyn :args) (os/args)))]
+                (or (dyn :args) []))]
     (if (and (> (length argv) 0)
              (peg/match script-pattern (first argv)))
       (tuple/slice argv 1)
@@ -72,6 +77,9 @@
       (= 1 argc) (print (vtt->txt (read-file (first argv))))
       :else (write-file (last argv) (vtt->txt (read-file (first argv)))))))
 
+(defn main [& args]
+  (apply -main args))
+
 # Run entrypoint only when executed as a script, not when imported as a module.
 (when (= (dyn :state) :script)
-  (apply -main (or (dyn :args) (os/args))))
+  (apply -main (or (dyn :args) [])))
